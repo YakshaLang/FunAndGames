@@ -1,0 +1,83 @@
+# All assets from https://www.kenney.nl/assets/
+# Code ported to Yaksha based on https://github.com/tashvit/space-blast
+
+import raylib as rl
+import raylib.utils
+import libs.numbers as num
+import libs.perlin
+import libs.random
+
+SCENE_TITLE: Const[u8] = 0u8
+SCENE_PLAY: Const[u8] = 0u8
+SCENE_GAME_OVER: Const[u8] = 0u8
+
+
+class State:
+    width: float
+    height: float
+    angle: float
+    frame_count: u64
+    seed: u64
+    assets: Assets
+
+class Assets:
+    blue: rl.Color
+    green: rl.Color
+    color3: rl.Color
+    white: rl.Color
+    player: rl.Texture2D
+
+def load_image(s: str) -> rl.Texture2D:
+    print("loading image" + s)
+    img: rl.Image = rl.load_image(s)
+    if img == None:
+        print("Image not loaded: " + s)
+    tex: rl.Texture2D = rl.load_texture_from_image(img)
+    if img != None:
+        print("Unloaded image: " + s)
+        rl.unload_image(img)
+    return tex
+
+
+def game_step(d: utils.Data) -> None:
+    s: State = cast("State", d)
+    rl.begin_drawing()
+    rl.clear_background(rl.color(220, 255, 196, 255))
+    # Game logic ---
+    rl.draw_texture(s.assets.player, 100, 100, s.assets.white)
+    # ---------------
+    rl.draw_fps(0, 0)
+    rl.end_drawing()
+    s.frame_count = s.frame_count + num.i2uu(1)
+    random.set_seed(s.seed)
+
+def init_state() -> State:
+    s: State = State()
+    s.angle = random.random_betweenf(30.0f, 45.0f)
+    s.width = 1920.0f
+    s.height = 1080.0f
+    s.frame_count = 0u64
+    s.assets = Assets()
+    s.assets.blue = rl.color(12, 255, 214, 255)
+    s.assets.green = rl.color(0, 255, 0, 255)
+    s.assets.color3 = rl.color(100, 150, 156, 255)
+    s.assets.white = rl.color(255, 255, 255, 255)
+    s.assets.player = load_image(".\\assets\\img\\playerShip1_blue.png")
+    s.seed = random.init_random()
+    return s
+
+def del_state(current: utils.Data) -> None:
+    s: State = cast("State", current)
+    rl.unload_texture(s.assets.player)
+    del s.assets
+    del s
+
+def main() -> int:
+    s: State = init_state()
+    rl.init_window(num.f2i(s.width), num.f2i(s.height), "Fractal Tree in the Wind")
+    # Avoid while loop for better performance in WASM/WEB builds
+    utils.run_game_loop(0, cast("utils.Data", s))
+    # Clean up
+    if not utils.is_hot_reload():
+        del_state(cast("utils.Data", s))
+    return 0
