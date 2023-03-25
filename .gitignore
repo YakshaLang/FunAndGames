@@ -4,4 +4,4 @@
 *.c
 .idea
 *.exe
-space_blast\space_blast
+/space_blast/space_blast

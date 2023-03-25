@@ -1,6 +1,8 @@
 # All assets from https://www.kenney.nl/assets/
 # Code ported to Yaksha based on https://github.com/tashvit/space-blast
 
+import libs.os
+import libs.console
 import raylib as rl
 import raylib.utils
 import libs.numbers as num
@@ -10,73 +12,106 @@ import libs.random
 SCENE_TITLE: Const[u8] = 0u8
 SCENE_PLAY: Const[u8] = 0u8
 SCENE_GAME_OVER: Const[u8] = 0u8
-
+GAME_W: Const[int] = 1920
+GAME_H: Const[int] = 1080
 
 class State:
-    width: float
-    height: float
-    angle: float
     frame_count: u64
     seed: u64
     assets: Assets
+    player_x: int
+    player_y: int
+    speed: int
 
 class Assets:
-    blue: rl.Color
-    green: rl.Color
-    color3: rl.Color
+    loaded: bool
+    bg: rl.Color
     white: rl.Color
     player: rl.Texture2D
+    enemy1: rl.Texture2D
+    enemy2: rl.Texture2D
+    enemy3: rl.Texture2D
+    enemy4: rl.Texture2D
+    enemy5: rl.Texture2D
+    meteor: rl.Texture2D
 
 def load_image(s: str) -> rl.Texture2D:
-    print("loading image" + s)
-    img: rl.Image = rl.load_image(s)
-    if img == None:
-        print("Image not loaded: " + s)
-    tex: rl.Texture2D = rl.load_texture_from_image(img)
-    if img != None:
-        print("Unloaded image: " + s)
-        rl.unload_image(img)
+    path: str
+    if os.is_windows():
+        path = "assets\\img\\" + s
+    else:
+        path = "assets/img/" + s
+    console.cyan("Loading texture")
+    console.red(" := ")
+    console.green(path)
+    println("")
+    tex: rl.Texture2D = rl.load_texture(path)
     return tex
 
 
 def game_step(d: utils.Data) -> None:
     s: State = cast("State", d)
+    ensure_assets(s)
     rl.begin_drawing()
-    rl.clear_background(rl.color(220, 255, 196, 255))
+    rl.clear_background(s.assets.bg)
     # Game logic ---
-    rl.draw_texture(s.assets.player, 100, 100, s.assets.white)
+    if rl.is_key_down(rl.KEY_W):
+        s.player_y -= s.speed
+    if rl.is_key_down(rl.KEY_A):
+        s.player_x -= s.speed
+    if rl.is_key_down(rl.KEY_S):
+        s.player_y += s.speed
+    if rl.is_key_down(rl.KEY_D):
+        s.player_x += s.speed
+    rl.draw_texture(s.assets.player, s.player_x, s.player_y, s.assets.white)
     # ---------------
     rl.draw_fps(0, 0)
     rl.end_drawing()
-    s.frame_count = s.frame_count + num.i2uu(1)
+    s.frame_count = s.frame_count + 1u64
     random.set_seed(s.seed)
 
 def init_state() -> State:
     s: State = State()
-    s.angle = random.random_betweenf(30.0f, 45.0f)
-    s.width = 1920.0f
-    s.height = 1080.0f
     s.frame_count = 0u64
     s.assets = Assets()
-    s.assets.blue = rl.color(12, 255, 214, 255)
-    s.assets.green = rl.color(0, 255, 0, 255)
-    s.assets.color3 = rl.color(100, 150, 156, 255)
-    s.assets.white = rl.color(255, 255, 255, 255)
-    s.assets.player = load_image(".\\assets\\img\\playerShip1_blue.png")
+    s.assets.loaded = False
     s.seed = random.init_random()
+    s.player_x = GAME_H / 2
+    s.player_y = GAME_W / 2
+    s.speed = 5
     return s
+
+def ensure_assets(s: State) -> None:
+    if s.assets.loaded:
+        return
+    s.assets.bg = rl.color(0, 0, 0, 255)
+    s.assets.white = rl.color(255, 255, 255, 255)
+    s.assets.player = load_image("playerShip1_blue.png")
+    s.assets.enemy1 = load_image("shipBeige_manned.png")
+    s.assets.enemy2 = load_image("shipBlue_manned.png")
+    s.assets.enemy3 = load_image("shipPink_manned.png")
+    s.assets.enemy4 = load_image("shipGreen_manned.png")
+    s.assets.enemy5 = load_image("shipYellow_manned.png")
+    s.assets.meteor = load_image("meteorGrey_tiny2.png")
+    s.assets.loaded = True
 
 def del_state(current: utils.Data) -> None:
     s: State = cast("State", current)
-    rl.unload_texture(s.assets.player)
+    if s.assets.loaded:
+        rl.unload_texture(s.assets.player)
+        rl.unload_texture(s.assets.enemy1)
+        rl.unload_texture(s.assets.enemy2)
+        rl.unload_texture(s.assets.enemy3)
+        rl.unload_texture(s.assets.enemy4)
+        rl.unload_texture(s.assets.enemy5)
     del s.assets
     del s
 
 def main() -> int:
     s: State = init_state()
-    rl.init_window(num.f2i(s.width), num.f2i(s.height), "Fractal Tree in the Wind")
+    rl.init_window(GAME_W, GAME_H, "Space blast")
     # Avoid while loop for better performance in WASM/WEB builds
-    utils.run_game_loop(0, cast("utils.Data", s))
+    utils.run_game_loop(60, cast("utils.Data", s))
     # Clean up
     if not utils.is_hot_reload():
         del_state(cast("utils.Data", s))
