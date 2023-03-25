@@ -22,6 +22,7 @@ class State:
     player_x: int
     player_y: int
     speed: int
+    stars: Array[Tuple[int, int, int, int]]
 
 class Assets:
     loaded: bool
@@ -45,16 +46,37 @@ def load_image(s: str) -> rl.Texture2D:
     console.red(" := ")
     console.green(path)
     println("")
-    tex: rl.Texture2D = rl.load_texture(path)
-    return tex
+    return rl.load_texture(path)
 
+def update_stars(s: State) -> None:
+    c: int = 0
+    while c < 100:
+        # y += speed
+        s.stars[c][1] += s.stars[c][3]
+        # if we are out of the screen recreate the star
+        if s.stars[c][1] > GAME_H + 10:
+            s.stars[c][1] = -10
+            s.stars[c][0] = rl.get_random_value(0, GAME_W)
+        c += 1
+
+def draw_stars(s: State) -> None:
+    c: int = 0
+    while c < 100:
+        star: Tuple[int, int, int, int] = s.stars[c]
+        # If the star size is 4 draw a meteor
+        if s.stars[c][2] == 4:
+            rl.draw_texture(s.assets.meteor, star[0], star[1], s.assets.white)
+        else:
+            rl.draw_circle(star[0], star[1], cast("float", star[2]), s.assets.white)
+        c += 1
 
 def game_step(d: utils.Data) -> None:
     s: State = cast("State", d)
     ensure_assets(s)
     rl.begin_drawing()
     rl.clear_background(s.assets.bg)
-    # Game logic ---
+    # ----------------------------------------------
+    # ----------------------------------------------
     if rl.is_key_down(rl.KEY_W):
         s.player_y -= s.speed
     if rl.is_key_down(rl.KEY_A):
@@ -63,12 +85,14 @@ def game_step(d: utils.Data) -> None:
         s.player_y += s.speed
     if rl.is_key_down(rl.KEY_D):
         s.player_x += s.speed
+    update_stars(s)
+    draw_stars(s)
     rl.draw_texture(s.assets.player, s.player_x, s.player_y, s.assets.white)
-    # ---------------
+    # -----------------------------------------------
+    # ----------------------------------------------
     rl.draw_fps(0, 0)
     rl.end_drawing()
     s.frame_count = s.frame_count + 1u64
-    random.set_seed(s.seed)
 
 def init_state() -> State:
     s: State = State()
@@ -79,6 +103,14 @@ def init_state() -> State:
     s.player_x = GAME_H / 2
     s.player_y = GAME_W / 2
     s.speed = 5
+    s.stars = arrnew("Tuple[int, int, int, int]", 100)
+    c: int = 0
+    while c < 100:
+        s.stars[c][0] = rl.get_random_value(0, GAME_W)
+        s.stars[c][1] = rl.get_random_value(0, GAME_H)
+        s.stars[c][2] = rl.get_random_value(1, 4)
+        s.stars[c][3] = rl.get_random_value(1, 4)
+        c += 1
     return s
 
 def ensure_assets(s: State) -> None:
@@ -110,9 +142,7 @@ def del_state(current: utils.Data) -> None:
 def main() -> int:
     s: State = init_state()
     rl.init_window(GAME_W, GAME_H, "Space blast")
-    # Avoid while loop for better performance in WASM/WEB builds
     utils.run_game_loop(60, cast("utils.Data", s))
-    # Clean up
     if not utils.is_hot_reload():
         del_state(cast("utils.Data", s))
     return 0
