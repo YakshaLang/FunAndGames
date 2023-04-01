@@ -14,6 +14,9 @@ SCENE_PLAY: Const[u8] = 1u8
 SCENE_GAME_OVER: Const[u8] = 2u8
 GAME_W: Const[int] = 1920
 GAME_H: Const[int] = 1080
+STAR_COUNT: Const[int] = 100
+ENEMY_COUNT: Const[int] = 10
+FPS_TARGET: Const[int] = 60
 
 class State:
     frame_count: u64
@@ -23,7 +26,7 @@ class State:
     player_y: int
     speed: int
     stars: Array[Tuple[int, int, int, int]]
-    enemies: Array[Tuple[int, int, int, int]]
+    enemies: Array[Tuple[int, int, int, int, int]]
     bullets: Array[Tuple[int, int]]
     scene: u8
 
@@ -41,7 +44,7 @@ class Assets:
 
 def update_stars(s: State) -> None:
     c: int = 0
-    while c < 100:
+    while c < STAR_COUNT:
         # y += speed
         s.stars[c][1] += s.stars[c][3]
         # if we are out of the screen recreate the star
@@ -86,17 +89,20 @@ def update_player(s: State) -> None:
 
 def update_enemies(s: State) -> None:
     c: int = 0
-    while c < 10:
+    while c < ENEMY_COUNT:
         s.enemies[c][1] += s.enemies[c][3]
+        swing: u64 = cast("u64", s.enemies[c][4]) + s.frame_count
+        s.enemies[c][0] += s.enemies[c][3] * iif(swing % 60u64 < 30u64, 1, -1)
         if s.enemies[c][1] > GAME_H + 50:
             s.enemies[c][1] = -rl.get_random_value(60, 100)
             s.enemies[c][0] = rl.get_random_value(0, GAME_W)
             s.enemies[c][3] = rl.get_random_value(1, 5)
+            s.enemies[c][4] = rl.get_random_value(100, 10000)
         c += 1
 
 def draw_stars(s: State) -> None:
     c: int = 0
-    while c < 100:
+    while c < STAR_COUNT:
         star: Tuple[int, int, int, int] = s.stars[c]
         # If the star size is 4 draw a meteor
         if s.stars[c][2] == 4:
@@ -107,7 +113,7 @@ def draw_stars(s: State) -> None:
 
 def draw_enemies(s: State) -> None:
     c: int = 0
-    while c < 10:
+    while c < ENEMY_COUNT:
         draw_image(get_enemy_ship(s, s.enemies[c][2]), s.enemies[c][0], s.enemies[c][1])
         c += 1
 
@@ -151,8 +157,8 @@ def init_state() -> State:
     s.frame_count = 0u64
     s.assets = Assets()
     s.assets.loaded = False
-    s.stars = arrnew("Tuple[int, int, int, int]", 100)
-    s.enemies = arrnew("Tuple[int, int, int, int]", 10)
+    s.stars = arrnew("Tuple[int, int, int, int]", STAR_COUNT)
+    s.enemies = arrnew("Tuple[int, int, int, int, int]", ENEMY_COUNT)
     s.bullets = arrnew("Tuple[int, int]", 100)
     s.seed = random.init_random()
     reset_state(s)
@@ -163,18 +169,19 @@ def reset_state(s: State) -> None:
     s.player_y = GAME_W / 2
     s.speed = 5
     c: int = 0
-    while c < 100:
+    while c < STAR_COUNT:
         s.stars[c][0] = rl.get_random_value(0, GAME_W)
         s.stars[c][1] = rl.get_random_value(0, GAME_H)
         s.stars[c][2] = rl.get_random_value(1, 4)
         s.stars[c][3] = rl.get_random_value(1, 4)
         c += 1
     c = 0
-    while c < 10:
+    while c < ENEMY_COUNT:
         s.enemies[c][0] = rl.get_random_value(0, GAME_W)
         s.enemies[c][1] = -rl.get_random_value(60, 100)
         s.enemies[c][2] = rl.get_random_value(1, 5)
         s.enemies[c][3] = rl.get_random_value(1, 5)
+        s.enemies[c][4] = rl.get_random_value(100, 10000)
         c += 1
 
 def ensure_assets(s: State) -> None:
@@ -207,7 +214,7 @@ def main() -> int:
     s: State = init_state()
     s.scene = SCENE_TITLE
     rl.init_window(GAME_W, GAME_H, "Space blast")
-    utils.run_game_loop(60, cast("utils.Data", s))
+    utils.run_game_loop(FPS_TARGET, cast("utils.Data", s))
     if not utils.is_hot_reload():
         del_state(cast("utils.Data", s))
     return 0
