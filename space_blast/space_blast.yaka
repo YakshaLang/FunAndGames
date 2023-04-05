@@ -15,8 +15,28 @@ SCENE_GAME_OVER: Const[u8] = 2u8
 GAME_W: Const[int] = 1920
 GAME_H: Const[int] = 1080
 STAR_COUNT: Const[int] = 100
-ENEMY_COUNT: Const[int] = 10
+ENEMY_COUNT: Const[int] = 20
 FPS_TARGET: Const[int] = 60
+
+@onstack
+class Star:
+    x: int
+    y: int
+    speed: int
+    r: int
+
+@onstack
+class Enemy:
+    x: int
+    y: int
+    speed: int
+    type: int
+    swing: int
+
+@onstack
+class Bullet:
+    x: int
+    y: int
 
 class State:
     frame_count: u64
@@ -29,6 +49,9 @@ class State:
     enemies: Array[Tuple[int, int, int, int, int]]
     bullets: Array[Tuple[int, int]]
     scene: u8
+    player_moving: bool
+    player_bullet: Tuple[int, int]
+    player_score: int
 
 class Assets:
     loaded: bool
@@ -41,6 +64,7 @@ class Assets:
     enemy4: rl.Texture2D
     enemy5: rl.Texture2D
     meteor: rl.Texture2D
+    enemy_laser: rl.Texture2D
 
 def update_stars(s: State) -> None:
     c: int = 0
@@ -57,15 +81,20 @@ def update_stars(s: State) -> None:
 def update_player(s: State) -> None:
     w2: int = cast("int", s.assets.player.width) / 2
     h2: int = cast("int", s.assets.player.height) / 2
+    s.player_moving = False
     # User pressed a key -> move the player
     if rl.is_key_down(rl.KEY_W):
         s.player_y -= s.speed
+        s.player_moving = True
     if rl.is_key_down(rl.KEY_A):
         s.player_x -= s.speed
+        s.player_moving = True
     if rl.is_key_down(rl.KEY_S):
         s.player_y += s.speed
+        s.player_moving = True
     if rl.is_key_down(rl.KEY_D):
         s.player_x += s.speed
+        s.player_moving = True
     # Ensure that the player width/height is constrained
     # So we cannot go out of the bounds
     if s.player_x <= w2:
@@ -78,14 +107,20 @@ def update_player(s: State) -> None:
         s.player_y = GAME_H - h2
     # Check collisions with enemies
     c: int = 0
-    while c < 10:
+    while c < ENEMY_COUNT:
         collide: bool = collides(get_enemy_ship(s, s.enemies[c][2]), s.enemies[c][0], s.enemies[c][1], s.assets.player, s.player_x, s.player_y)
         if collide:
             s.scene = SCENE_GAME_OVER
             break
         c += 1
     # Check collisions with bullets
-
+    c = 0
+    while c < ENEMY_COUNT:
+        collide: bool = collides(s.assets.enemy_laser, s.bullets[c][0], s.bullets[c][1], s.assets.player, s.player_x, s.player_y)
+        if collide:
+            s.scene = SCENE_GAME_OVER
+            break
+        c += 1
 
 def update_enemies(s: State) -> None:
     c: int = 0
@@ -98,6 +133,15 @@ def update_enemies(s: State) -> None:
             s.enemies[c][0] = rl.get_random_value(0, GAME_W)
             s.enemies[c][3] = rl.get_random_value(1, 5)
             s.enemies[c][4] = rl.get_random_value(100, 10000)
+        elif swing % 6u64 == 0u64 and s.bullets[c][1] == -999 and s.enemies[c][1] > 5:
+            s.bullets[c][0] = s.enemies[c][0] + 32
+            s.bullets[c][1] = s.enemies[c][1] + 32
+
+        if s.bullets[c][1] > GAME_H + 50:
+            s.bullets[c][0] = -999
+            s.bullets[c][1] = -999
+        elif s.bullets[c][1] != -999:
+            s.bullets[c][1] += 6
         c += 1
 
 def draw_stars(s: State) -> None:
@@ -115,6 +159,8 @@ def draw_enemies(s: State) -> None:
     c: int = 0
     while c < ENEMY_COUNT:
         draw_image(get_enemy_ship(s, s.enemies[c][2]), s.enemies[c][0], s.enemies[c][1])
+        if s.bullets[c][1] != -999:
+            draw_image(s.assets.enemy_laser, s.bullets[c][0], s.bullets[c][1])
         c += 1
 
 def draw_player(s: State) -> None:
@@ -159,7 +205,7 @@ def init_state() -> State:
     s.assets.loaded = False
     s.stars = arrnew("Tuple[int, int, int, int]", STAR_COUNT)
     s.enemies = arrnew("Tuple[int, int, int, int, int]", ENEMY_COUNT)
-    s.bullets = arrnew("Tuple[int, int]", 100)
+    s.bullets = arrnew("Tuple[int, int]", ENEMY_COUNT)
     s.seed = random.init_random()
     reset_state(s)
     return s
@@ -167,6 +213,9 @@ def init_state() -> State:
 def reset_state(s: State) -> None:
     s.player_x = GAME_H / 2
     s.player_y = GAME_W / 2
+    s.player_bullet[0] = -999
+    s.player_bullet[1] = -999
+
     s.speed = 5
     c: int = 0
     while c < STAR_COUNT:
@@ -182,6 +231,8 @@ def reset_state(s: State) -> None:
         s.enemies[c][2] = rl.get_random_value(1, 5)
         s.enemies[c][3] = rl.get_random_value(1, 5)
         s.enemies[c][4] = rl.get_random_value(100, 10000)
+        s.bullets[c][0] = -999
+        s.bullets[c][1] = -999
         c += 1
 
 def ensure_assets(s: State) -> None:
@@ -196,6 +247,7 @@ def ensure_assets(s: State) -> None:
     s.assets.enemy4 = load_image("shipGreen_manned.png")
     s.assets.enemy5 = load_image("shipYellow_manned.png")
     s.assets.meteor = load_image("meteorGrey_tiny2.png")
+    s.assets.enemy_laser = load_image("laserRed03.png")
     s.assets.loaded = True
 
 def del_state(current: utils.Data) -> None:
@@ -207,6 +259,9 @@ def del_state(current: utils.Data) -> None:
         rl.unload_texture(s.assets.enemy3)
         rl.unload_texture(s.assets.enemy4)
         rl.unload_texture(s.assets.enemy5)
+        rl.unload_texture(s.assets.enemy_laser)
+    del s.enemies
+    del s.stars
     del s.assets
     del s
 
@@ -239,10 +294,10 @@ def draw_image(img: rl.Texture2D, x: int, y: int) -> None:
     rl.draw_texture(img, x - w / 2, y - h / 2, rl.color(255, 255, 255, 255))
 
 def rectangle(img: rl.Texture2D, x: int, y: int) -> rl.Rectangle:
-    w: int = cast("int", img.width)
-    h: int = cast("int", img.height)
-    actual_x: float = cast("float", x - w / 2)
-    actual_y: float = cast("float", y - h / 2)
+    w: int = cast("int", img.width) - 2
+    h: int = cast("int", img.height) - 2
+    actual_x: float = cast("float", x - w / 2) + 1
+    actual_y: float = cast("float", y - h / 2) + 1
     return rl.rectangle(actual_x, actual_y, cast("float", w), cast("float", h))
 
 def collides(img1: rl.Texture2D, x1: int, y1: int, img2: rl.Texture2D, x2: int, y2: int) -> bool:
