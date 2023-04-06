@@ -25,6 +25,13 @@ class Star:
     speed: int
     r: int
 
+
+@onstack
+class Bullet:
+    x: int
+    y: int
+
+
 @onstack
 class Enemy:
     x: int
@@ -32,11 +39,7 @@ class Enemy:
     speed: int
     type: int
     swing: int
-
-@onstack
-class Bullet:
-    x: int
-    y: int
+    bullet: Bullet
 
 class State:
     frame_count: u64
@@ -45,12 +48,11 @@ class State:
     player_x: int
     player_y: int
     speed: int
-    stars: Array[Tuple[int, int, int, int]]
-    enemies: Array[Tuple[int, int, int, int, int]]
-    bullets: Array[Tuple[int, int]]
+    stars: Array[Star]
+    enemies: Array[Enemy]
     scene: u8
     player_moving: bool
-    player_bullet: Tuple[int, int]
+    player_bullet: Bullet
     player_score: int
 
 class Assets:
@@ -67,16 +69,14 @@ class Assets:
     enemy_laser: rl.Texture2D
 
 def update_stars(s: State) -> None:
-    c: int = 0
-    while c < STAR_COUNT:
+    for star: Star in s.stars:
         # y += speed
-        s.stars[c][1] += s.stars[c][3]
+        star.y += star.speed
         # if we are out of the screen recreate the star
-        if s.stars[c][1] > GAME_H + 10:
-            s.stars[c][1] = -10
-            s.stars[c][0] = rl.get_random_value(0, GAME_W)
-            s.stars[c][3] = rl.get_random_value(1, 4)
-        c += 1
+        if star.y > GAME_H + 10:
+            star.y = -10
+            star.x = rl.get_random_value(0, GAME_W)
+            star.r = rl.get_random_value(1, 4)
 
 def update_player(s: State) -> None:
     w2: int = cast("int", s.assets.player.width) / 2
@@ -106,62 +106,45 @@ def update_player(s: State) -> None:
     if s.player_y >= GAME_H - h2:
         s.player_y = GAME_H - h2
     # Check collisions with enemies
-    c: int = 0
-    while c < ENEMY_COUNT:
-        collide: bool = collides(get_enemy_ship(s, s.enemies[c][2]), s.enemies[c][0], s.enemies[c][1], s.assets.player, s.player_x, s.player_y)
-        if collide:
+    for enemy: Enemy in s.enemies:
+        enemy_collide: bool = collides(get_enemy_ship(s, enemy.type), enemy.x, enemy.y, s.assets.player, s.player_x, s.player_y)
+        bullet_collide: bool = collides(s.assets.enemy_laser, enemy.bullet.x, enemy.bullet.y, s.assets.player, s.player_x, s.player_y)
+        if enemy_collide or bullet_collide:
             s.scene = SCENE_GAME_OVER
             break
-        c += 1
-    # Check collisions with bullets
-    c = 0
-    while c < ENEMY_COUNT:
-        collide: bool = collides(s.assets.enemy_laser, s.bullets[c][0], s.bullets[c][1], s.assets.player, s.player_x, s.player_y)
-        if collide:
-            s.scene = SCENE_GAME_OVER
-            break
-        c += 1
 
 def update_enemies(s: State) -> None:
-    c: int = 0
-    while c < ENEMY_COUNT:
-        s.enemies[c][1] += s.enemies[c][3]
-        swing: u64 = cast("u64", s.enemies[c][4]) + s.frame_count
-        s.enemies[c][0] += s.enemies[c][3] * iif(swing % 60u64 < 30u64, 1, -1)
-        if s.enemies[c][1] > GAME_H + 50:
-            s.enemies[c][1] = -rl.get_random_value(60, 100)
-            s.enemies[c][0] = rl.get_random_value(0, GAME_W)
-            s.enemies[c][3] = rl.get_random_value(1, 5)
-            s.enemies[c][4] = rl.get_random_value(100, 10000)
-        elif swing % 6u64 == 0u64 and s.bullets[c][1] == -999 and s.enemies[c][1] > 5:
-            s.bullets[c][0] = s.enemies[c][0] + 32
-            s.bullets[c][1] = s.enemies[c][1] + 32
+    for enemy: Enemy in s.enemies:
+        enemy.y += enemy.speed
+        swing: u64 = cast("u64", enemy.swing) + s.frame_count
+        enemy.x += enemy.speed * iif(swing % 60u64 < 30u64, 1, -1)
+        if enemy.y > GAME_H + 50:
+            enemy.y = -rl.get_random_value(60, 100)
+            enemy.x = rl.get_random_value(0, GAME_W)
+            enemy.type = rl.get_random_value(1, 5)
+            enemy.swing = rl.get_random_value(100, 10000)
+        elif swing % 6u64 == 0u64 and enemy.bullet.y == -999 and enemy.y > 5:
+            enemy.bullet.x = enemy.x + 32
+            enemy.bullet.y = enemy.y + 32
 
-        if s.bullets[c][1] > GAME_H + 50:
-            s.bullets[c][0] = -999
-            s.bullets[c][1] = -999
-        elif s.bullets[c][1] != -999:
-            s.bullets[c][1] += 6
-        c += 1
+        if enemy.bullet.y > GAME_H + 50:
+            enemy.bullet.x = -999
+            enemy.bullet.y = -999
+        elif enemy.bullet.y != -999:
+            enemy.bullet.y += 6
 
 def draw_stars(s: State) -> None:
-    c: int = 0
-    while c < STAR_COUNT:
-        star: Tuple[int, int, int, int] = s.stars[c]
-        # If the star size is 4 draw a meteor
-        if s.stars[c][2] == 4:
-            draw_image(s.assets.meteor, star[0], star[1])
+    for star: Star in s.stars:
+        if star.r == 4:
+            draw_image(s.assets.meteor, star.x, star.y)
         else:
-            rl.draw_circle(star[0], star[1], cast("float", star[2]), s.assets.white)
-        c += 1
+            rl.draw_circle(star.x, star.y, cast("float", star.r), s.assets.white)
 
 def draw_enemies(s: State) -> None:
-    c: int = 0
-    while c < ENEMY_COUNT:
-        draw_image(get_enemy_ship(s, s.enemies[c][2]), s.enemies[c][0], s.enemies[c][1])
-        if s.bullets[c][1] != -999:
-            draw_image(s.assets.enemy_laser, s.bullets[c][0], s.bullets[c][1])
-        c += 1
+    for enemy: Enemy in s.enemies:
+        draw_image(get_enemy_ship(s, enemy.type), enemy.x, enemy.y)
+        if enemy.bullet.y != -999:
+            draw_image(s.assets.enemy_laser, enemy.bullet.x, enemy.bullet.y)
 
 def draw_player(s: State) -> None:
     draw_image(s.assets.player, s.player_x, s.player_y)
@@ -203,9 +186,8 @@ def init_state() -> State:
     s.frame_count = 0u64
     s.assets = Assets()
     s.assets.loaded = False
-    s.stars = arrnew("Tuple[int, int, int, int]", STAR_COUNT)
-    s.enemies = arrnew("Tuple[int, int, int, int, int]", ENEMY_COUNT)
-    s.bullets = arrnew("Tuple[int, int]", ENEMY_COUNT)
+    s.stars = arrnew("Star", STAR_COUNT)
+    s.enemies = arrnew("Enemy", ENEMY_COUNT)
     s.seed = random.init_random()
     reset_state(s)
     return s
@@ -213,27 +195,24 @@ def init_state() -> State:
 def reset_state(s: State) -> None:
     s.player_x = GAME_H / 2
     s.player_y = GAME_W / 2
-    s.player_bullet[0] = -999
-    s.player_bullet[1] = -999
-
+    s.player_bullet.x = -999
+    s.player_bullet.y = -999
     s.speed = 5
-    c: int = 0
-    while c < STAR_COUNT:
-        s.stars[c][0] = rl.get_random_value(0, GAME_W)
-        s.stars[c][1] = rl.get_random_value(0, GAME_H)
-        s.stars[c][2] = rl.get_random_value(1, 4)
-        s.stars[c][3] = rl.get_random_value(1, 4)
-        c += 1
-    c = 0
-    while c < ENEMY_COUNT:
-        s.enemies[c][0] = rl.get_random_value(0, GAME_W)
-        s.enemies[c][1] = -rl.get_random_value(60, 100)
-        s.enemies[c][2] = rl.get_random_value(1, 5)
-        s.enemies[c][3] = rl.get_random_value(1, 5)
-        s.enemies[c][4] = rl.get_random_value(100, 10000)
-        s.bullets[c][0] = -999
-        s.bullets[c][1] = -999
-        c += 1
+
+    for star: Star in s.stars:
+        star.x = rl.get_random_value(0, GAME_W)
+        star.y = rl.get_random_value(0, GAME_H)
+        star.speed = rl.get_random_value(1, 4)
+        star.r = rl.get_random_value(1, 4)
+
+    for enemy: Enemy in s.enemies:
+        enemy.x = rl.get_random_value(0, GAME_W)
+        enemy.y = -rl.get_random_value(60, 100)
+        enemy.speed = rl.get_random_value(1, 5)
+        enemy.type = rl.get_random_value(1, 5)
+        enemy.swing = rl.get_random_value(100, 10000)
+        enemy.bullet.x = -999
+        enemy.bullet.y = -999
 
 def ensure_assets(s: State) -> None:
     if s.assets.loaded:
@@ -296,8 +275,8 @@ def draw_image(img: rl.Texture2D, x: int, y: int) -> None:
 def rectangle(img: rl.Texture2D, x: int, y: int) -> rl.Rectangle:
     w: int = cast("int", img.width) - 2
     h: int = cast("int", img.height) - 2
-    actual_x: float = cast("float", x - w / 2) + 1
-    actual_y: float = cast("float", y - h / 2) + 1
+    actual_x: float = cast("float", x - w / 2) + 1.0f
+    actual_y: float = cast("float", y - h / 2) + 1.0f
     return rl.rectangle(actual_x, actual_y, cast("float", w), cast("float", h))
 
 def collides(img1: rl.Texture2D, x1: int, y1: int, img2: rl.Texture2D, x2: int, y2: int) -> bool:
