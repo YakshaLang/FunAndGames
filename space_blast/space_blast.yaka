@@ -25,12 +25,10 @@ class Star:
     speed: int
     r: int
 
-
 @onstack
 class Bullet:
     x: int
     y: int
-
 
 @onstack
 class Enemy:
@@ -67,10 +65,10 @@ class Assets:
     enemy5: rl.Texture2D
     meteor: rl.Texture2D
     enemy_laser: rl.Texture2D
+    player_laser: rl.Texture2D
 
 def update_stars(s: State) -> None:
     for star: Star in s.stars:
-        # y += speed
         star.y += star.speed
         # if we are out of the screen recreate the star
         if star.y > GAME_H + 10:
@@ -95,6 +93,15 @@ def update_player(s: State) -> None:
     if rl.is_key_down(rl.KEY_D):
         s.player_x += s.speed
         s.player_moving = True
+    if rl.is_key_down(rl.KEY_SPACE):
+        if s.player_bullet.y == -999:
+            s.player_bullet.y = s.player_y - 32
+            s.player_bullet.x = s.player_x - 32
+    if s.player_bullet.y < 0:
+        s.player_bullet.y = -999
+        s.player_bullet.x = -999
+    if s.player_bullet.y != -999:
+        s.player_bullet.y -= 10
     # Ensure that the player width/height is constrained
     # So we cannot go out of the bounds
     if s.player_x <= w2:
@@ -109,10 +116,22 @@ def update_player(s: State) -> None:
     for enemy: Enemy in s.enemies:
         enemy_collide: bool = collides(get_enemy_ship(s, enemy.type), enemy.x, enemy.y, s.assets.player, s.player_x, s.player_y)
         bullet_collide: bool = collides(s.assets.enemy_laser, enemy.bullet.x, enemy.bullet.y, s.assets.player, s.player_x, s.player_y)
+        enemy_in_fire: bool = collides(get_enemy_ship(s, enemy.type), enemy.x, enemy.y, s.assets.player_laser, s.player_bullet.x, s.player_bullet.y)
+        bulllets_collide: bool = collides(s.assets.enemy_laser, enemy.bullet.x, enemy.bullet.y, s.assets.player_laser, s.player_bullet.x, s.player_bullet.y)
         if enemy_collide or bullet_collide:
             s.scene = SCENE_GAME_OVER
             break
-
+        if enemy_in_fire:
+            s.player_score += 10
+            enemy.y = GAME_H + 50
+            s.player_bullet.y = -999
+            s.player_bullet.x = -999
+            continue
+        if bulllets_collide:
+            enemy.bullet.x = -999
+            enemy.bullet.y = -999
+            s.player_bullet.y = -999
+            s.player_bullet.x = -999
 def update_enemies(s: State) -> None:
     for enemy: Enemy in s.enemies:
         enemy.y += enemy.speed
@@ -148,6 +167,8 @@ def draw_enemies(s: State) -> None:
 
 def draw_player(s: State) -> None:
     draw_image(s.assets.player, s.player_x, s.player_y)
+    if s.player_bullet.y != -999:
+        draw_image(s.assets.player_laser, s.player_bullet.x, s.player_bullet.y)
 
 def game_step(d: utils.Data) -> None:
     s: State = cast("State", d)
@@ -160,6 +181,8 @@ def game_step(d: utils.Data) -> None:
         update_player(s)
         update_stars(s)
         update_enemies(s)
+        if s.frame_count % 60u64 == 0u64:
+            s.player_score += 1
     draw_stars(s)
     draw_player(s)
     draw_enemies(s)
@@ -177,7 +200,8 @@ def game_step(d: utils.Data) -> None:
             reset_state(s)
     # -----------------------------------------------
     # ----------------------------------------------
-    rl.draw_fps(0, 0)
+    # rl.draw_fps(0, 0)
+    rl.draw_text(num.i2s(s.player_score), GAME_W - 300, 0, 64, rl.color(0, 255, 0, 255))
     rl.end_drawing()
     s.frame_count = s.frame_count + 1u64
 
@@ -198,6 +222,7 @@ def reset_state(s: State) -> None:
     s.player_bullet.x = -999
     s.player_bullet.y = -999
     s.speed = 5
+    s.player_score = 0
 
     for star: Star in s.stars:
         star.x = rl.get_random_value(0, GAME_W)
@@ -227,6 +252,7 @@ def ensure_assets(s: State) -> None:
     s.assets.enemy5 = load_image("shipYellow_manned.png")
     s.assets.meteor = load_image("meteorGrey_tiny2.png")
     s.assets.enemy_laser = load_image("laserRed03.png")
+    s.assets.player_laser = load_image("laserBlue03.png")
     s.assets.loaded = True
 
 def del_state(current: utils.Data) -> None:
@@ -239,6 +265,7 @@ def del_state(current: utils.Data) -> None:
         rl.unload_texture(s.assets.enemy4)
         rl.unload_texture(s.assets.enemy5)
         rl.unload_texture(s.assets.enemy_laser)
+        rl.unload_texture(s.assets.player_laser)
     del s.enemies
     del s.stars
     del s.assets
