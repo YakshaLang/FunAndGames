@@ -43,7 +43,6 @@ class Enemy:
 
 class State:
     frame_count: u64
-    seed: u64
     assets: Assets
     player_x: int
     player_y: int
@@ -236,7 +235,7 @@ def init_state() -> State:
     s.stars = arrnew("Star", STAR_COUNT)
     s.enemies = arrnew("Enemy", ENEMY_COUNT)
     s.player_bullets = arrnew("Bullet", PLAYER_BULLETS)
-    s.seed = random.init_random()
+    random.init_random()
     reset_state(s)
     return s
 
