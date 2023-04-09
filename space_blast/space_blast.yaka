@@ -15,9 +15,10 @@ SCENE_GAME_OVER: Const[u8] = 2u8
 GAME_W: Const[int] = 1920
 GAME_H: Const[int] = 1080
 STAR_COUNT: Const[int] = 100
-ENEMY_COUNT: Const[int] = 18
+ENEMY_COUNT: Const[int] = 20
 FPS_TARGET: Const[int] = 60
-PLAYER_BULLETS: Const[int] = 5
+PLAYER_BULLETS: Const[int] = 10
+ENEMY_BULLET_MAX: Const[int] = 5
 
 @onstack
 class Star:
@@ -67,6 +68,9 @@ class Assets:
     meteor: rl.Texture2D
     enemy_laser: rl.Texture2D
     player_laser: rl.Texture2D
+    enemy_laser_sound: rl.Sound
+    player_laser_sound: rl.Sound
+    explosion_sound: rl.Sound
 
 def update_stars(s: State) -> None:
     for star: Star in s.stars:
@@ -83,6 +87,7 @@ def update_player_bullets(s: State, pressed_fire: bool) -> None:
         if bullet.y == -999 and to_fire and s.frame_count % 8u64 == 0u64:
             bullet.y = s.player_y - 32
             bullet.x = s.player_x - 32
+            rl.play_sound(s.assets.player_laser_sound)
             to_fire = False
         if bullet.y < 0:
             bullet.y = -999
@@ -125,6 +130,7 @@ def update_player(s: State) -> None:
         bullet_collide: bool = collides(s.assets.enemy_laser, enemy.bullet.x, enemy.bullet.y, s.assets.player, s.player_x, s.player_y)
         if enemy_collide or bullet_collide:
             s.scene = SCENE_GAME_OVER
+            rl.play_sound(s.assets.explosion_sound)
             break
         for bullet: Bullet in s.player_bullets:
             enemy_in_fire: bool = collides(get_enemy_ship(s, enemy.type), enemy.x, enemy.y, s.assets.player_laser, bullet.x, bullet.y)
@@ -134,6 +140,7 @@ def update_player(s: State) -> None:
                 enemy.y = GAME_H + 50
                 bullet.y = -999
                 bullet.x = -999
+                rl.play_sound(s.assets.explosion_sound)
             if bullet.y != -999 and bulllets_collide:
                 enemy.bullet.x = -999
                 enemy.bullet.y = -999
@@ -141,6 +148,11 @@ def update_player(s: State) -> None:
                 bullet.x = -999
 
 def update_enemies(s: State) -> None:
+    active_bullets: int = 0
+    for enemy: Enemy in s.enemies:
+        if enemy.bullet.y != -999:
+            active_bullets += 1
+
     for enemy: Enemy in s.enemies:
         enemy.y += enemy.speed
         swing: u64 = cast("u64", enemy.swing) + s.frame_count
@@ -150,13 +162,15 @@ def update_enemies(s: State) -> None:
             enemy.x = rl.get_random_value(0, GAME_W)
             enemy.type = rl.get_random_value(1, 5)
             enemy.swing = rl.get_random_value(100, 10000)
-        elif swing % 6u64 == 0u64 and enemy.bullet.y == -999 and enemy.y > 5:
+        elif swing % 6u64 == 0u64 and enemy.bullet.y == -999 and enemy.y > 5 and active_bullets < ENEMY_BULLET_MAX:
             enemy.bullet.x = enemy.x + 32
             enemy.bullet.y = enemy.y + 32
-
+            rl.play_sound(s.assets.enemy_laser_sound)
+            active_bullets += 1
         if enemy.bullet.y > GAME_H + 50:
             enemy.bullet.x = -999
             enemy.bullet.y = -999
+            active_bullets -= 1
         elif enemy.bullet.y != -999:
             enemy.bullet.y += 6
 
@@ -265,6 +279,9 @@ def ensure_assets(s: State) -> None:
     s.assets.meteor = load_image("meteorGrey_tiny2.png")
     s.assets.enemy_laser = load_image("laserRed03.png")
     s.assets.player_laser = load_image("laserBlue03.png")
+    s.assets.player_laser_sound = load_sound("laserRetro_000.ogg")
+    s.assets.enemy_laser_sound = load_sound("laserRetro_004.ogg")
+    s.assets.explosion_sound = load_sound("explosionCrunch_000.ogg")
     s.assets.loaded = True
 
 def del_state(current: utils.Data) -> None:
@@ -278,6 +295,9 @@ def del_state(current: utils.Data) -> None:
         rl.unload_texture(s.assets.enemy5)
         rl.unload_texture(s.assets.enemy_laser)
         rl.unload_texture(s.assets.player_laser)
+        rl.unload_sound(s.assets.player_laser_sound)
+        rl.unload_sound(s.assets.enemy_laser_sound)
+        rl.unload_sound(s.assets.explosion_sound)
     del s.enemies
     del s.stars
     del s.assets
@@ -288,9 +308,12 @@ def main() -> int:
     s: State = init_state()
     s.scene = SCENE_TITLE
     rl.init_window(GAME_W, GAME_H, "Space blast")
+    rl.init_audio_device()
     utils.run_game_loop(FPS_TARGET, cast("utils.Data", s))
     if not utils.is_hot_reload():
         del_state(cast("utils.Data", s))
+    rl.close_audio_device()
+    rl.close_window()
     return 0
 
 # ------------ Utilities -----------
@@ -306,6 +329,18 @@ def load_image(s: str) -> rl.Texture2D:
     console.green(path)
     println("")
     return rl.load_texture(path)
+
+def load_sound(s: str) -> rl.Sound:
+    path: str
+    if os.is_windows():
+        path = "assets\\audio\\" + s
+    else:
+        path = "assets/audio/" + s
+    console.cyan("Loading sound")
+    console.red(" := ")
+    console.green(path)
+    println("")
+    return rl.load_sound(path)
 
 def draw_image(img: rl.Texture2D, x: int, y: int) -> None:
     w: int = cast("int", img.width)
