@@ -1,3 +1,3 @@
 @echo off
 call clean-files.cmd
-carpntr -Rr space_blast.yaka
+carpntr -RNr space_blast.yaka

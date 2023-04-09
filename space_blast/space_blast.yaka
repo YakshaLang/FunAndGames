@@ -15,8 +15,9 @@ SCENE_GAME_OVER: Const[u8] = 2u8
 GAME_W: Const[int] = 1920
 GAME_H: Const[int] = 1080
 STAR_COUNT: Const[int] = 100
-ENEMY_COUNT: Const[int] = 20
+ENEMY_COUNT: Const[int] = 18
 FPS_TARGET: Const[int] = 60
+PLAYER_BULLETS: Const[int] = 5
 
 @onstack
 class Star:
@@ -50,7 +51,7 @@ class State:
     enemies: Array[Enemy]
     scene: u8
     player_moving: bool
-    player_bullet: Bullet
+    player_bullets: Array[Bullet]
     player_score: int
 
 class Assets:
@@ -76,32 +77,38 @@ def update_stars(s: State) -> None:
             star.x = rl.get_random_value(0, GAME_W)
             star.r = rl.get_random_value(1, 4)
 
+def update_player_bullets(s: State, pressed_fire: bool) -> None:
+    to_fire: bool = pressed_fire
+    for bullet: Bullet in s.player_bullets:
+        if bullet.y == -999 and to_fire and s.frame_count % 8u64 == 0u64:
+            bullet.y = s.player_y - 32
+            bullet.x = s.player_x - 32
+            to_fire = False
+        if bullet.y < 0:
+            bullet.y = -999
+            bullet.x = -999
+        if bullet.y != -999:
+            bullet.y -= 10
+
 def update_player(s: State) -> None:
     w2: int = cast("int", s.assets.player.width) / 2
     h2: int = cast("int", s.assets.player.height) / 2
     s.player_moving = False
     # User pressed a key -> move the player
-    if rl.is_key_down(rl.KEY_W):
+    if rl.is_key_down(rl.KEY_W) or rl.is_key_down(rl.KEY_UP):
         s.player_y -= s.speed
         s.player_moving = True
-    if rl.is_key_down(rl.KEY_A):
+    if rl.is_key_down(rl.KEY_A) or rl.is_key_down(rl.KEY_LEFT):
         s.player_x -= s.speed
         s.player_moving = True
-    if rl.is_key_down(rl.KEY_S):
+    if rl.is_key_down(rl.KEY_S) or rl.is_key_down(rl.KEY_DOWN):
         s.player_y += s.speed
         s.player_moving = True
-    if rl.is_key_down(rl.KEY_D):
+    if rl.is_key_down(rl.KEY_D) or rl.is_key_down(rl.KEY_RIGHT):
         s.player_x += s.speed
         s.player_moving = True
-    if rl.is_key_down(rl.KEY_SPACE):
-        if s.player_bullet.y == -999:
-            s.player_bullet.y = s.player_y - 32
-            s.player_bullet.x = s.player_x - 32
-    if s.player_bullet.y < 0:
-        s.player_bullet.y = -999
-        s.player_bullet.x = -999
-    if s.player_bullet.y != -999:
-        s.player_bullet.y -= 10
+    update_player_bullets(s, rl.is_key_down(rl.KEY_SPACE))
+
     # Ensure that the player width/height is constrained
     # So we cannot go out of the bounds
     if s.player_x <= w2:
@@ -116,22 +123,23 @@ def update_player(s: State) -> None:
     for enemy: Enemy in s.enemies:
         enemy_collide: bool = collides(get_enemy_ship(s, enemy.type), enemy.x, enemy.y, s.assets.player, s.player_x, s.player_y)
         bullet_collide: bool = collides(s.assets.enemy_laser, enemy.bullet.x, enemy.bullet.y, s.assets.player, s.player_x, s.player_y)
-        enemy_in_fire: bool = collides(get_enemy_ship(s, enemy.type), enemy.x, enemy.y, s.assets.player_laser, s.player_bullet.x, s.player_bullet.y)
-        bulllets_collide: bool = collides(s.assets.enemy_laser, enemy.bullet.x, enemy.bullet.y, s.assets.player_laser, s.player_bullet.x, s.player_bullet.y)
         if enemy_collide or bullet_collide:
             s.scene = SCENE_GAME_OVER
             break
-        if enemy_in_fire:
-            s.player_score += 10
-            enemy.y = GAME_H + 50
-            s.player_bullet.y = -999
-            s.player_bullet.x = -999
-            continue
-        if bulllets_collide:
-            enemy.bullet.x = -999
-            enemy.bullet.y = -999
-            s.player_bullet.y = -999
-            s.player_bullet.x = -999
+        for bullet: Bullet in s.player_bullets:
+            enemy_in_fire: bool = collides(get_enemy_ship(s, enemy.type), enemy.x, enemy.y, s.assets.player_laser, bullet.x, bullet.y)
+            bulllets_collide: bool = collides(s.assets.enemy_laser, enemy.bullet.x, enemy.bullet.y, s.assets.player_laser, bullet.x, bullet.y)
+            if bullet.y != -999 and enemy_in_fire:
+                s.player_score += 10
+                enemy.y = GAME_H + 50
+                bullet.y = -999
+                bullet.x = -999
+            if bullet.y != -999 and bulllets_collide:
+                enemy.bullet.x = -999
+                enemy.bullet.y = -999
+                bullet.y = -999
+                bullet.x = -999
+
 def update_enemies(s: State) -> None:
     for enemy: Enemy in s.enemies:
         enemy.y += enemy.speed
@@ -167,8 +175,9 @@ def draw_enemies(s: State) -> None:
 
 def draw_player(s: State) -> None:
     draw_image(s.assets.player, s.player_x, s.player_y)
-    if s.player_bullet.y != -999:
-        draw_image(s.assets.player_laser, s.player_bullet.x, s.player_bullet.y)
+    for bullet: Bullet in s.player_bullets:
+        if bullet.y != -999:
+            draw_image(s.assets.player_laser, bullet.x, bullet.y)
 
 def game_step(d: utils.Data) -> None:
     s: State = cast("State", d)
@@ -188,14 +197,14 @@ def game_step(d: utils.Data) -> None:
     draw_enemies(s)
     if s.scene == SCENE_TITLE:
         if (s.frame_count / 50u64) % 2u64 == 0u64:
-            rl.draw_text("Press [space] to start", GAME_W / 2 - 450, GAME_H / 2 - 30, 80, s.assets.white)
-        if rl.is_key_down(rl.KEY_SPACE):
+            rl.draw_text("Press [enter] to start", GAME_W / 2 - 450, GAME_H / 2 - 30, 80, s.assets.white)
+        if rl.is_key_down(rl.KEY_ENTER):
             s.scene = SCENE_PLAY
     if s.scene == SCENE_GAME_OVER:
         if (s.frame_count / 50u64) % 2u64 == 0u64:
             rl.draw_text("Game over ", GAME_W / 2 - 200, GAME_H / 2 - 30, 80, s.assets.white)
-            rl.draw_text("Press [space] to start", GAME_W / 2 - 450, GAME_H / 2 + 50, 80, s.assets.white)
-        if rl.is_key_down(rl.KEY_SPACE):
+            rl.draw_text("Press [enter] to start", GAME_W / 2 - 450, GAME_H / 2 + 50, 80, s.assets.white)
+        if rl.is_key_down(rl.KEY_ENTER):
             s.scene = SCENE_PLAY
             reset_state(s)
     # -----------------------------------------------
@@ -212,6 +221,7 @@ def init_state() -> State:
     s.assets.loaded = False
     s.stars = arrnew("Star", STAR_COUNT)
     s.enemies = arrnew("Enemy", ENEMY_COUNT)
+    s.player_bullets = arrnew("Bullet", PLAYER_BULLETS)
     s.seed = random.init_random()
     reset_state(s)
     return s
@@ -219,10 +229,12 @@ def init_state() -> State:
 def reset_state(s: State) -> None:
     s.player_x = GAME_H / 2
     s.player_y = GAME_W / 2
-    s.player_bullet.x = -999
-    s.player_bullet.y = -999
     s.speed = 5
     s.player_score = 0
+
+    for bullet: Bullet in s.player_bullets:
+        bullet.x = -999
+        bullet.y = -999
 
     for star: Star in s.stars:
         star.x = rl.get_random_value(0, GAME_W)
@@ -269,6 +281,7 @@ def del_state(current: utils.Data) -> None:
     del s.enemies
     del s.stars
     del s.assets
+    del s.player_bullets
     del s
 
 def main() -> int:
