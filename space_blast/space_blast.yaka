@@ -311,8 +311,8 @@ def main() -> int:
     utils.run_game_loop(FPS_TARGET, cast("utils.Data", s))
     if not utils.is_hot_reload():
         del_state(cast("utils.Data", s))
-    rl.close_audio_device()
-    rl.close_window()
+        rl.close_audio_device()
+        rl.close_window()
     return 0
 
 # ------------ Utilities -----------
