@@ -1,0 +1,133 @@
+import libs.os
+import libs.console
+import raylib as rl
+import raylib.utils
+import libs.numbers as num
+import libs.perlin
+import libs.random
+
+SCENE_TITLE: Const[u8] = 0u8
+SCENE_PLAY: Const[u8] = 1u8
+SCENE_GAME_OVER: Const[u8] = 2u8
+GAME_W: Const[int] = 1920
+GAME_H: Const[int] = 1080
+FPS_TARGET: Const[int] = 60
+
+BRICK_H: Const[int] = 20
+BRICK_W: Const[int] = 70
+
+@onstack
+class Player:
+    x: int
+    y: int
+
+@onstack
+class Colour:
+    brown: rl.Color
+    yellow: rl.Color
+    bg: rl.Color
+    white: rl.Color
+    blue: rl.Color
+
+class State:
+    frame_count: u64
+    scene: u8
+    colour: Colour
+    player: Player
+
+def draw_player(s: State) -> None:
+    import libs.io
+    class X:
+        a: int
+    rl.draw_rectangle(s.player.x + 50 - 150, s.player.y + 50 - 50, 200, 40, s.colour.blue)
+    rl.draw_rectangle(s.player.x + 100 - 150, s.player.y + 10 - 50, 100, 40, s.colour.blue)
+    rl.draw_circle(s.player.x + 100 - 150, s.player.y + 90 - 50, 25.0f, s.colour.bg)
+    rl.draw_circle(s.player.x + 100 - 150, s.player.y + 90 - 50, 20.0f, s.colour.yellow)
+
+    rl.draw_circle(s.player.x + 200 - 150, s.player.y + 90 - 50, 25.0f, s.colour.bg)
+    rl.draw_circle(s.player.x + 200 - 150, s.player.y + 90 - 50, 20.0f, s.colour.yellow)
+    rl.draw_circle(s.player.x, s.player.y, 2.0f, s.colour.white)
+
+def draw_brick_layer(s: State, x: int, y: int, w: int, h: int) -> None:
+    cx: int = x
+    cy: int = y
+    rw: int = w
+    rh: int = h
+    r: int = 0
+    while rh > 0:
+        while rw > 0:
+            rl.draw_rectangle(cx, cy, BRICK_W, BRICK_H, s.colour.brown)
+            rl.draw_rectangle_lines(cx, cy, BRICK_W, BRICK_H, s.colour.yellow)
+            rw -= BRICK_W
+            cx += BRICK_W
+        r += 1
+        cx = iif(r % 2 == 0, 0, BRICK_W / -2)
+        rh -= BRICK_H
+        cy += BRICK_H
+        rw = w - cx
+
+def game_step(d: utils.Data) -> None:
+    s: State = cast("State", d)
+    rl.begin_drawing()
+    rl.clear_background(s.colour.bg)
+    # ----------------------------------------------
+    # ----------------------------------------------
+    if s.scene == SCENE_PLAY:
+        draw_brick_layer(s, 0, 900, GAME_W, 200)
+        draw_player(s)
+        if rl.is_key_down(rl.KEY_D):
+            s.player.x += 4
+        if rl.is_key_down(rl.KEY_A):
+            s.player.x -= 4
+    if s.scene == SCENE_TITLE:
+        if (s.frame_count / 50u64) % 2u64 == 0u64:
+            rl.draw_text("Press [enter] to start", GAME_W / 2 - 450, GAME_H / 2 - 30, 80, s.colour.white)
+        if rl.is_key_down(rl.KEY_ENTER):
+            s.scene = SCENE_PLAY
+    if s.scene == SCENE_GAME_OVER:
+        if (s.frame_count / 50u64) % 2u64 == 0u64:
+            rl.draw_text("Game over ", GAME_W / 2 - 200, GAME_H / 2 - 30, 80, s.colour.white)
+            rl.draw_text("Press [enter] to start", GAME_W / 2 - 450, GAME_H / 2 + 50, 80, s.colour.white)
+        if rl.is_key_down(rl.KEY_ENTER):
+            s.scene = SCENE_PLAY
+            reset_state(s)
+    # -----------------------------------------------
+    # ----------------------------------------------
+    rl.draw_fps(0, 0)
+    rl.end_drawing()
+    s.frame_count += 1u64
+
+def hex_color(rgb: int) -> rl.Color:
+    red: int = (rgb >> 16) & 0xFF
+    green: int = (rgb >> 8) & 0xFF
+    blue: int = rgb & 0xFF
+    return rl.color(red, green, blue, 255)
+
+def init_state() -> State:
+    s: State = State()
+    s.colour.bg = rl.color(0, 0, 0, 255)
+    s.colour.white = rl.color(255, 255, 255, 255)
+    s.colour.brown = hex_color(0x804020)
+    s.colour.yellow = hex_color(0xe0e000)
+    s.colour.blue = hex_color(0x4060e0)
+    reset_state(s)
+    return s
+
+def reset_state(s: State) -> None:
+    s.scene = SCENE_TITLE
+    s.player.x = 0
+    s.player.y = 835
+
+def del_state(current: utils.Data) -> None:
+    s: State = cast("State", current)
+    del s
+
+def main() -> int:
+    s: State = init_state()
+    s.scene = SCENE_TITLE
+    rl.init_window(GAME_W, GAME_H, "Car car")
+    utils.run_game_loop(FPS_TARGET, cast("utils.Data", s))
+    if not utils.is_hot_reload():
+        del_state(cast("utils.Data", s))
+        rl.close_window()
+    return 0
