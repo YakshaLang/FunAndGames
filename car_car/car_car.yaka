@@ -36,9 +36,6 @@ class State:
     player: Player
 
 def draw_player(s: State) -> None:
-    import libs.io
-    class X:
-        a: int
     rl.draw_rectangle(s.player.x + 50 - 150, s.player.y + 50 - 50, 200, 40, s.colour.blue)
     rl.draw_rectangle(s.player.x + 100 - 150, s.player.y + 10 - 50, 100, 40, s.colour.blue)
     rl.draw_circle(s.player.x + 100 - 150, s.player.y + 90 - 50, 25.0f, s.colour.bg)
